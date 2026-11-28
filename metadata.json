@@ -1,0 +1,6 @@
+{
+  "name": "Termux studio",
+  "description": "Mobile polyglot IDE and Termux addon for C, C++, Java, Rust, Go, Zig, and Assembly with Raylib, custom App cross-platform packager (build.config), GPU driver access, and Git/GitHub CLI sync.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

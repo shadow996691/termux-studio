@@ -1,0 +1,144 @@
+# Termux studio (`v1.0.0`)
+
+**Termux studio** is a mobile polyglot IDE for Android built with Kotlin and Jetpack Compose that pairs an on-device code editor with **Termux** as its native Linux compilation and execution engine.
+
+All projects, libraries, and IPC bridges live in your shared device folder (`/storage/emulated/0/TermuxStudio`, linked to `~/TermuxStudio` in Termux) so both the Android app and Termux share the exact same files seamlessly.
+
+---
+
+## Features
+
+- **Polyglot Code Editor & Smart Indentation**
+  - Supports **C, C++, Zig, Assembly (`nasm`), Rust, Go, Java, Kotlin, and Fortran**.
+  - Brace-aware auto-indentation, configurable indent width (2 / 4 / 8 spaces or tabs), line numbers, word wrap, and adjustable font size.
+  - Compact floating autocomplete popup for headers, language keywords, snippets, and library APIs, paired with a collapsible slide-up build output drawer.
+
+- **Compiler Hub & `termux-studio` Companion Package (`v1.0.0`)**
+  - Choose and install compilers right from the **Compiler** tab: `clang`, `clang++`, `gcc`, `g++`, `openjdk`, `rustc`, `go`, `zig`, `nasm`, `gfortran`, and `kotlinc`.
+  - Ships with the **`termux-studio`** Debian/Termux companion CLI package (`termux-repo/pool/main/t/termux-studio/termux-studio_1.0.0_all.deb`) for storage linking (`link-storage`), toolchain probing (`probe`), IPC daemon listening (`listen`), live CDN resolution (`cdn-resolve`), library fetching (`lib-fetch`), and noexec-safe binary staging (`compile`).
+
+- **Libraries: Bundled, Offline Import, Termux Fetch & Live Online CDN**
+  - **Bundled Raylib 6.2 (ARM64)**: Extract headers and libraries straight into your shared workspace `libs/raylib/` folder.
+  - **Offline Internal Storage Importer**: Pick `.tar.gz`, `.tgz`, `.zip`, `.h`/`.hpp`, `.a`, or `.so` library files directly from internal storage without an internet connection.
+  - **Termux Package & Archive Fetcher**: Install or download libraries inside Termux using `pkg`, `curl`, `wget`, or `git clone`.
+  - **Live Online CDN Resolver**: Register online library API/header/archive URLs that resolve live at compile time (`termux-studio cdn-resolve`) when Wi-Fi or mobile data is connected.
+
+- **Multi-Language `app` Cross-Platform Packager**
+  - Includes the `app` library (`libs/app/`) and CLI (`app Android | app Linux | app Window | app macOS | app build`) backed by `build.config`.
+  - Compiles **Zig (`.zig`), Assembly (`.asm`/`.s`), Rust (`.rs`), C (`.c`), and C++ (`.cpp`)** units into object files (`.o`), links them with `app_runtime.o`, and packages targets for:
+    - **Android** (`.apk`)
+    - **Linux** (`.deb`, `.rpm`, `.pkg.tar.zst`, `.AppImage`)
+    - **Windows** (`.exe`)
+    - **macOS** (`.app` bundle)
+
+- **In-App Terminal & GitHub Sync**
+  - Displays command execution, compiler diagnostics, and runtime stdout/stderr directly inside the **Terminal** tab via Termux `RUN_COMMAND` callbacks and shared IPC logs.
+  - Built-in **GitHub** panel for checking repository status, viewing diffs, committing, and pushing changes through Termux `git`.
+
+- **Studio Settings**
+  - **5 Dark Themes**: *Deep Obsidian*, *Midnight Nord*, *Dracula Slate*, *Solarized Dark*, *Terminal Matrix*.
+  - **5 Accent Presets**: *Electric Cyan*, *Mint Emerald*, *Warm Amber*, *Soft Violet*, *Neon Coral*.
+  - Customizable editor typography, indentation, compiler optimization level (`-O0`, `-O2`, `-O3`, `-Os`), background build persistence, and enabled languages.
+
+- **Permissions & GPU Diagnostics**
+  - Dedicated **Perms** tab for runtime hardware permissions (Storage, Camera, Microphone, Bluetooth, Location, Notifications) and OpenGL ES 3.0 / Vulkan / Mesa Zink GPU detection.
+
+---
+
+## Requirements
+
+- **Android**: Android 7.0+ (`minSdk = 24`, `targetSdk = 36`)
+- **Termux**: Installed from **F-Droid** (Play Store builds are deprecated and unsupported)
+
+---
+
+## Setup & Installation
+
+### 1. Enable External Apps in Termux
+Inside Termux, allow Termux studio to send `RUN_COMMAND` intents:
+
+```bash
+mkdir -p ~/.termux
+echo "allow-external-apps = true" >> ~/.termux/termux.properties
+termux-reload-settings
+termux-setup-storage
+```
+
+### 2. Install the `termux-studio` Package (`v1.0.0`)
+
+#### Option A: Install directly from your local repo / shared folder
+```bash
+pkg install -y ./termux-repo/pool/main/t/termux-studio/termux-studio_1.0.0_all.deb
+termux-studio link-storage
+termux-studio probe
+```
+
+#### Option B: Install via `pkg` using GitHub Pages APT Repo
+Enable GitHub Pages on your `termux-studio` repository (or host `termux-repo/`), then run in Termux:
+
+```bash
+echo "deb [trusted=yes] https://<YOUR_USERNAME>.github.io/termux-studio/termux-repo stable main" > $PREFIX/etc/apt/sources.list.d/termux-studio.list
+pkg update -y
+pkg install -y termux-studio
+termux-studio link-storage
+termux-studio probe
+```
+
+---
+
+## Building the Android APK
+
+### Option A: Automated Build on GitHub Actions (No PC Required)
+This repository includes `.github/workflows/build-apk.yml`.
+1. Push this repository to GitHub.
+2. Open the **Actions** tab on GitHub and wait for **Build Debug APK** to finish (or trigger it manually).
+3. Download the **`termux-studio-v1.0.0-debug-apk`** artifact and install `app-debug.apk` on your Android phone.
+4. Pushing a version tag (e.g., `git tag v1.0.0 && git push origin v1.0.0`) automatically attaches `app-debug.apk` to a GitHub Release.
+
+### Option B: Local Build with Gradle
+```bash
+# Decode the included debug signing keystore (ignored by git)
+base64 -d debug.keystore.base64 > debug.keystore
+
+# Build debug APK
+gradle assembleDebug
+```
+The compiled APK will be generated at:
+`app/build/outputs/apk/debug/app-debug.apk`
+
+---
+
+## Repository Structure
+
+```text
+.
+├── .github/workflows/build-apk.yml   # GitHub Actions APK builder
+├── app/                              # Android app (Kotlin + Jetpack Compose)
+│   └── src/main/
+│       ├── assets/
+│       │   ├── libs/                 # Bundled Raylib 6.2 ARM64 & App C/C++/multi-lang runtime
+│       │   └── termux_pkg/           # termux-studio v1.0.0 CLI script
+│       └── java/com/example/         # UI, ViewModel, Termux bridge, APT builder, SAF importers
+├── termux-repo/                      # Ready-to-host Termux APT repo & .deb (v1.0.0)
+│   ├── dists/stable/
+│   ├── pool/main/t/termux-studio/termux-studio_1.0.0_all.deb
+│   └── install-termux-studio.sh
+├── build.gradle.kts
+├── settings.gradle.kts
+└── metadata.json
+```
+
+---
+
+## Troubleshooting APK Installation on Android
+
+- Make sure you are installing the compiled **`.apk` file** (not the exported source `.zip` archive).
+- In Android **Settings → Apps → Special app access → Install unknown apps**, allow installation for your browser or file manager.
+- If upgrading over a differently signed build, uninstall the existing `Termux studio` app (`com.termux.studio`) before installing the new APK.
+- If **Google Play Protect** prompts for a newly built debug APK, expand **More details → Install anyway**.
+
+---
+
+## License
+
+Choose and add a `LICENSE` file (such as **MIT** or **Apache-2.0**) matching how you want contributors and users to redistribute this repository.

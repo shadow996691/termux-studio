@@ -1,0 +1,6 @@
+{
+  "summary":  "Implementation plan for Termux studio v1.1 update: live internet-gated CDN library fetching, unified multi-language App library (Zig, ASM, Rust, C, C++) via object linking in user folder, full Settings (dark themes + accents, compiler, editor indentation, languages), compact floating suggestion box + slide-up Editor build drawer, Terminal tab output capture, offline Import from Internal Storage, Termux pkg/curl/wget downloads, and updated termux-studio v1.1.0 package.",
+  "updatedAt":  "2026-11-28T07:45:20.180013356Z",
+  "requestFeedback":  true,
+  "userFacing":  true
+}

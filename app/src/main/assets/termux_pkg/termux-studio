@@ -1,0 +1,376 @@
+#!/data/data/com.termux/files/usr/bin/bash
+set -e
+
+ACTION="${1:-help}"
+VERSION="1.0.0"
+SHARED_DEFAULT="/storage/emulated/0/TermuxStudio"
+TERMUX_LINK="$HOME/TermuxStudio"
+
+resolve_shared_dir() {
+  if [ -n "${TERMUX_STUDIO_SHARED:-}" ] && [ -d "$TERMUX_STUDIO_SHARED" ]; then
+    echo "$TERMUX_STUDIO_SHARED"
+  elif [ -d "$SHARED_DEFAULT" ]; then
+    echo "$SHARED_DEFAULT"
+  elif [ -d "$TERMUX_LINK" ]; then
+    echo "$TERMUX_LINK"
+  else
+    mkdir -p "$HOME/termux_studio_starter"
+    echo "$HOME/termux_studio_starter"
+  fi
+}
+
+cmd_link_storage() {
+  local target="${1:-$SHARED_DEFAULT}"
+  if [ ! -d "$HOME/storage/shared" ] && command -v termux-setup-storage >/dev/null 2>&1; then
+    echo "[termux-studio] Running termux-setup-storage..."
+    termux-setup-storage || true
+  fi
+  mkdir -p "$target" "$target/libs" "$target/.termux-ipc" 2>/dev/null || true
+  if [ -d "$target" ]; then
+    ln -sfn "$target" "$TERMUX_LINK"
+    echo "[termux-studio] Linked $TERMUX_LINK -> $target"
+  else
+    echo "[termux-studio] Shared path unavailable ($target). Grant storage permission in Android and run termux-setup-storage."
+  fi
+}
+
+probe_one() {
+  local id="$1"
+  local bin="$2"
+  if command -v "$bin" >/dev/null 2>&1; then
+    local ver
+    ver="$("$bin" --version 2>&1 | head -n 1 | tr '\n' ' ' | sed 's/"//g')"
+    [ -z "$ver" ] && ver="installed"
+    echo "${id}=1|${ver}"
+  else
+    echo "${id}=0|"
+  fi
+}
+
+cmd_probe() {
+  local shared
+  shared="$(resolve_shared_dir)"
+  local ipc="$shared/.termux-ipc"
+  mkdir -p "$ipc" 2>/dev/null || true
+  local out_file="$ipc/compilers.status"
+
+  {
+    echo "termux_studio=1|$VERSION"
+    probe_one "clang" "clang"
+    probe_one "clangpp" "clang++"
+    probe_one "gcc" "gcc"
+    probe_one "gpp" "g++"
+    probe_one "javac" "javac"
+    probe_one "rustc" "rustc"
+    probe_one "go" "go"
+    probe_one "zig" "zig"
+    probe_one "nasm" "nasm"
+    probe_one "gfortran" "gfortran"
+    probe_one "kotlinc" "kotlinc"
+    probe_one "make" "make"
+    probe_one "cmake" "cmake"
+    probe_one "git" "git"
+    probe_one "curl" "curl"
+    probe_one "wget" "wget"
+    if [ -d "$shared/libs/raylib/include" ] || pkg list-installed 2>/dev/null | grep -q '^raylib/'; then
+      echo "raylib=1|6.2"
+    else
+      echo "raylib=0|"
+    fi
+    echo "shared_dir=1|$shared"
+    echo "probed_at=1|$(date +%s)"
+  } | tee "$out_file"
+}
+
+cmd_listen() {
+  local shared="${1:-$(resolve_shared_dir)}"
+  local ipc="$shared/.termux-ipc"
+  mkdir -p "$ipc/inbox" "$ipc/outbox" 2>/dev/null || true
+  cmd_link_storage "$shared" >/dev/null 2>&1 || true
+  cmd_probe >/dev/null 2>&1 || true
+
+  local pid_file="$ipc/listener.pid"
+  echo "$$" > "$pid_file"
+  date +%s > "$ipc/listener.heartbeat"
+  echo "[termux-studio v$VERSION] Listener active (PID $$) watching $ipc"
+
+  if [ "${2:-}" = "--once" ]; then
+    exit 0
+  fi
+
+  local loops=0
+  while [ "$loops" -lt 60 ]; do
+    date +%s > "$ipc/listener.heartbeat"
+    for job in "$ipc"/inbox/*.sh; do
+      [ -e "$job" ] || continue
+      local base
+      base="$(basename "$job")"
+      echo "[termux-studio] Executing queued job $base"
+      (
+        cd "$shared" 2>/dev/null || cd "$HOME"
+        bash "$job" > "$ipc/outbox/${base}.log" 2>&1 || true
+      )
+      rm -f "$job"
+    done
+    sleep 2
+    loops=$((loops + 1))
+  done
+  rm -f "$pid_file"
+}
+
+check_online() {
+  local probe_url="$1"
+  if curl -fsSIL --connect-timeout 5 "$probe_url" >/dev/null 2>&1; then
+    return 0
+  fi
+  if curl -fsIL --connect-timeout 4 https://1.1.1.1 >/dev/null 2>&1 || ping -c 1 -W 3 1.1.1.1 >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
+}
+
+# Fetches online CDN library URLs live at compile time ONLY when Internet/Wi-Fi is connected.
+# Writes transient include/lib flags to <workdir>/.termux-ipc/cdn_flags.env
+cmd_cdn_resolve() {
+  local workdir="${1:-$(resolve_shared_dir)}"
+  shift || true
+  local ipc="$workdir/.termux-ipc"
+  mkdir -p "$ipc" 2>/dev/null || true
+  local env_file="$ipc/cdn_flags.env"
+  : > "$env_file"
+
+  if [ "$#" -eq 0 ]; then
+    exit 0
+  fi
+
+  local live_root="/tmp/termux_studio_cdn"
+  rm -rf "$live_root"
+  mkdir -p "$live_root"
+  local collected_flags=""
+
+  for spec in "$@"; do
+    local name="${spec%%::*}"
+    local url="${spec#*::}"
+    [ -z "$name" ] || [ -z "$url" ] && continue
+
+    if ! check_online "$url"; then
+      echo "[termux-studio] Error: Wi-Fi / Internet connection required for online CDN library '$name' ($url)." >&2
+      exit 2
+    fi
+
+    local dir="$live_root/$name"
+    mkdir -p "$dir/include" "$dir/lib"
+    local fname
+    fname="$(basename "${url%%\?*}")"
+    [ -z "$fname" ] && fname="${name}.h"
+    local dl="$dir/$fname"
+
+    echo "[termux-studio] Fetching live CDN library '$name' from $url ..."
+    curl -fSL --connect-timeout 10 "$url" -o "$dl"
+
+    case "$fname" in
+      *.tar.gz|*.tgz)
+        tar -xzf "$dl" -C "$dir"
+        ;;
+      *.zip)
+        if command -v unzip >/dev/null 2>&1; then
+          unzip -qo "$dl" -d "$dir"
+        fi
+        ;;
+      *.h|*.hpp|*.hh|*.hxx)
+        mv -f "$dl" "$dir/include/$fname"
+        ;;
+      *.so*|*.a)
+        mv -f "$dl" "$dir/lib/$fname"
+        ;;
+    esac
+
+    collected_flags="$collected_flags -I\"$dir\" -I\"$dir/include\""
+    for sub_inc in "$dir"/*/include; do
+      [ -d "$sub_inc" ] && collected_flags="$collected_flags -I\"$sub_inc\""
+    done
+    if ls "$dir/lib"/*.a "$dir/lib"/*.so* >/dev/null 2>&1; then
+      collected_flags="$collected_flags -L\"$dir/lib\""
+    fi
+  done
+
+  echo "export TERMUX_STUDIO_CDN_FLAGS='$collected_flags'" > "$env_file"
+  echo "[termux-studio] Resolved live CDN flags: $collected_flags"
+}
+
+cmd_lib_fetch() {
+  local shared="${1:-$(resolve_shared_dir)}"
+  local tool="${2:-curl}"
+  local lib_name="${3:-custom_lib}"
+  local target="${4:-}"
+  if [ -z "$target" ]; then
+    echo "[termux-studio] Usage: termux-studio lib-fetch <shared_dir> <pkg|curl|wget|git> <name> <url_or_pkg>"
+    exit 1
+  fi
+
+  local clean_name
+  clean_name="$(echo "$lib_name" | tr -cd 'A-Za-z0-9_.-')"
+  [ -z "$clean_name" ] && clean_name="custom_lib"
+  local dest="$shared/libs/$clean_name"
+  local tmp="$HOME/.termux_studio/dl_tmp/$clean_name"
+  rm -rf "$tmp"
+  mkdir -p "$tmp" "$dest"
+
+  case "$tool" in
+    pkg)
+      echo "[termux-studio] Installing via Termux pkg: pkg install -y $target"
+      pkg update -y && pkg install -y $target
+      return $?
+      ;;
+    git)
+      echo "[termux-studio] Cloning via git: git clone $target $dest"
+      rm -rf "$dest"
+      git clone --depth 1 "$target" "$dest"
+      return $?
+      ;;
+    wget)
+      local fname
+      fname="$(basename "${target%%\?*}")"
+      [ -z "$fname" ] && fname="${clean_name}.dl"
+      local dl="$tmp/$fname"
+      if ! command -v wget >/dev/null 2>&1; then
+        pkg install -y wget
+      fi
+      echo "[termux-studio] Downloading via wget: $target"
+      wget -O "$dl" "$target"
+      ;;
+    curl|*)
+      local fname
+      fname="$(basename "${target%%\?*}")"
+      [ -z "$fname" ] && fname="${clean_name}.dl"
+      local dl="$tmp/$fname"
+      echo "[termux-studio] Downloading via curl: $target"
+      curl -fSL --retry 2 "$target" -o "$dl"
+      ;;
+  esac
+
+  local dl_file
+  dl_file="$(ls -1 "$tmp" | head -n 1)"
+  if [ -n "$dl_file" ]; then
+    local full="$tmp/$dl_file"
+    case "$dl_file" in
+      *.tar.gz|*.tgz)
+        mkdir -p "$tmp/extract"
+        tar -xzf "$full" -C "$tmp/extract"
+        local count
+        count="$(ls -1 "$tmp/extract" | wc -l)"
+        if [ "$count" -eq 1 ] && [ -d "$tmp/extract/$(ls -1 "$tmp/extract")" ]; then
+          cp -rf "$tmp/extract/$(ls -1 "$tmp/extract")"/* "$dest/"
+        else
+          cp -rf "$tmp/extract"/* "$dest/"
+        fi
+        ;;
+      *.zip)
+        if ! command -v unzip >/dev/null 2>&1; then
+          pkg install -y unzip
+        fi
+        mkdir -p "$tmp/extract"
+        unzip -qo "$full" -d "$tmp/extract"
+        local count
+        count="$(ls -1 "$tmp/extract" | wc -l)"
+        if [ "$count" -eq 1 ] && [ -d "$tmp/extract/$(ls -1 "$tmp/extract")" ]; then
+          cp -rf "$tmp/extract/$(ls -1 "$tmp/extract")"/* "$dest/"
+        else
+          cp -rf "$tmp/extract"/* "$dest/"
+        fi
+        ;;
+      *.h|*.hpp|*.hh|*.hxx|*.c|*.cpp)
+        mkdir -p "$dest/include"
+        cp -f "$full" "$dest/include/$dl_file"
+        ;;
+      *.so*|*.a)
+        mkdir -p "$dest/lib"
+        cp -f "$full" "$dest/lib/$dl_file"
+        ;;
+      *)
+        cp -f "$full" "$dest/$dl_file"
+        ;;
+    esac
+  fi
+  rm -rf "$tmp"
+  echo "[termux-studio] Installed library into $dest"
+  ls -la "$dest"
+}
+
+cmd_compile() {
+  local workdir="${1:-$(resolve_shared_dir)}"
+  local b64_cmd="${2:-}"
+  local bin_name="${3:-}"
+  if [ -z "$b64_cmd" ]; then
+    echo "[termux-studio] Usage: termux-studio compile <workdir> <base64_cmd> [binary_to_run]"
+    exit 1
+  fi
+
+  local raw_cmd
+  raw_cmd="$(echo "$b64_cmd" | base64 -d)"
+  local ipc="$workdir/.termux-ipc"
+  mkdir -p "$HOME/.termux_studio/bin_stage" "$ipc" 2>/dev/null || true
+  cd "$workdir"
+
+  if [ -f "$ipc/cdn_flags.env" ]; then
+    # shellcheck disable=SC1090
+    source "$ipc/cdn_flags.env"
+  fi
+  export LD_LIBRARY_PATH="${workdir}/libs/raylib/lib:${workdir}/libs:${LD_LIBRARY_PATH:-}"
+
+  local rc=0
+  set +e
+  eval "$raw_cmd ${TERMUX_STUDIO_CDN_FLAGS:-}"
+  rc=$?
+  if [ "$rc" -ne 0 ] && [ -n "$bin_name" ] && [ -f "$workdir/$bin_name" ]; then
+    echo "[termux-studio] Staging $bin_name into Termux executable cache..."
+    cp "$workdir/$bin_name" "$HOME/.termux_studio/bin_stage/$bin_name"
+    chmod +x "$HOME/.termux_studio/bin_stage/$bin_name"
+    "$HOME/.termux_studio/bin_stage/$bin_name"
+    rc=$?
+  fi
+  set -e
+  echo "$rc" > "$ipc/last_run.exit"
+  exit "$rc"
+}
+
+case "$ACTION" in
+  version|--version|-v)
+    echo "termux-studio $VERSION"
+    ;;
+  link-storage)
+    shift || true
+    cmd_link_storage "$@"
+    ;;
+  probe)
+    cmd_probe
+    ;;
+  listen)
+    shift || true
+    cmd_listen "$@"
+    ;;
+  cdn-resolve)
+    shift || true
+    cmd_cdn_resolve "$@"
+    ;;
+  lib-fetch|cdn-add)
+    shift || true
+    cmd_lib_fetch "$@"
+    ;;
+  compile)
+    shift || true
+    cmd_compile "$@"
+    ;;
+  help|--help|-h|*)
+    cat <<USAGE
+termux-studio $VERSION - Termux companion CLI & listener for Termux studio IDE
+Commands:
+  termux-studio link-storage [shared_dir]        Link ~/TermuxStudio <-> shared folder
+  termux-studio probe                            Probe installed compilers & libraries
+  termux-studio listen [shared_dir] [--once]     Run companion IPC listener daemon
+  termux-studio cdn-resolve <dir> <name::url>... Fetch online CDN URLs live at build time
+  termux-studio lib-fetch <dir> <tool> <n> <arg> Install/download lib via pkg, curl, wget, or git
+  termux-studio compile <dir> <b64> [bin]        Compile & run (with noexec staging)
+USAGE
+    ;;
+esac

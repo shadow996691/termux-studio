@@ -1,0 +1,25 @@
+Origin: TermuxStudio
+Label: TermuxStudio
+Suite: stable
+Codename: stable
+Architectures: all aarch64 arm x86_64
+Components: main
+Description: Termux studio official companion APT repository
+MD5Sum:
+ d17eba7fe975d192d898789d9ee2b499              519 main/binary-all/Packages
+ 301f0502190f02ab44ed7e0958bf996c              375 main/binary-all/Packages.gz
+ d17eba7fe975d192d898789d9ee2b499              519 main/binary-aarch64/Packages
+ 301f0502190f02ab44ed7e0958bf996c              375 main/binary-aarch64/Packages.gz
+ d17eba7fe975d192d898789d9ee2b499              519 main/binary-arm/Packages
+ 301f0502190f02ab44ed7e0958bf996c              375 main/binary-arm/Packages.gz
+ d17eba7fe975d192d898789d9ee2b499              519 main/binary-x86_64/Packages
+ 301f0502190f02ab44ed7e0958bf996c              375 main/binary-x86_64/Packages.gz
+SHA256:
+ a3444f536429f1117b7a211359f5a0b0ed070dc71d25a78317b9f1724e52ebd3              519 main/binary-all/Packages
+ 97a389e3a5d3d91ec2ed4aa859814493cf727cba90d61022b094128f24edf453              375 main/binary-all/Packages.gz
+ a3444f536429f1117b7a211359f5a0b0ed070dc71d25a78317b9f1724e52ebd3              519 main/binary-aarch64/Packages
+ 97a389e3a5d3d91ec2ed4aa859814493cf727cba90d61022b094128f24edf453              375 main/binary-aarch64/Packages.gz
+ a3444f536429f1117b7a211359f5a0b0ed070dc71d25a78317b9f1724e52ebd3              519 main/binary-arm/Packages
+ 97a389e3a5d3d91ec2ed4aa859814493cf727cba90d61022b094128f24edf453              375 main/binary-arm/Packages.gz
+ a3444f536429f1117b7a211359f5a0b0ed070dc71d25a78317b9f1724e52ebd3              519 main/binary-x86_64/Packages
+ 97a389e3a5d3d91ec2ed4aa859814493cf727cba90d61022b094128f24edf453              375 main/binary-x86_64/Packages.gz

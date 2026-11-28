@@ -1,0 +1,14 @@
+Package: termux-studio
+Version: 1.0.0
+Architecture: all
+Maintainer: Termux studio <dev@termuxstudio.local>
+Depends: bash, coreutils, curl, wget, git, grep, sed, tar
+Filename: pool/main/t/termux-studio/termux-studio_1.0.0_all.deb
+Size: 6760
+MD5sum: f3de003e07cd97c1b0ade0eb2108e51c
+SHA1: e0650d68a478b1d307001d532b25afbc97a17f2b
+SHA256: b968972d916393f155fc113f866c11b843a1c4d0037191e454fc574a6e0e07cc
+Section: devel
+Priority: optional
+Description: Termux studio companion CLI, compiler bridge, and IPC listener daemon
+

@@ -1,0 +1,27 @@
+<resources>
+    <string name="app_name">Termux studio</string>
+    <string name="nav_editor">Editor</string>
+    <string name="nav_compiler">Compiler</string>
+    <string name="nav_terminal">Terminal</string>
+    <string name="nav_git">GitHub</string>
+    <string name="nav_libs">Libs</string>
+    <string name="nav_permissions">Perms</string>
+    <string name="nav_settings">Settings</string>
+    <string name="cd_settings">Open Settings</string>
+    <string name="action_run">Run</string>
+    <string name="action_build">Build</string>
+    <string name="action_save">Save</string>
+    <string name="action_files">Files</string>
+    <string name="termux_missing_title">Termux Not Installed</string>
+    <string name="termux_missing_body">Termux studio compiles and runs C, C++, Java, Rust, Go, Zig, Assembly, Raylib, and App packages using Termux as its native Linux engine. Install Termux from F-Droid to enable on-device execution and Git sync.</string>
+    <string name="termux_download_fdroid">Download Termux on F-Droid</string>
+    <string name="termux_copy_bootstrap">Copy Bootstrap Command</string>
+    <string name="cd_workspace_drawer">Open workspace explorer</string>
+    <string name="cd_run_code">Compile and run active file or project</string>
+    <string name="cd_save_file">Save active file</string>
+    <string name="cd_close_tab">Close file tab</string>
+    <string name="cd_add_file">Create new source or header file</string>
+    <string name="cd_open_termux_folder">Connect Termux folder</string>
+    <string name="cd_send_command">Execute command in Termux</string>
+    <string name="cd_clear_terminal">Clear terminal output</string>
+</resources>
